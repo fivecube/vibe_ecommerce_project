@@ -5,4 +5,5 @@ from . import views
 urlpatterns = [
     # This pattern maps the 'products/' URL to our product_list view
     path('products/', views.product_list, name='product-list'),
+    path('cart/add/', views.add_to_cart, name='add-to-cart'),
 ] 

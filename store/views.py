@@ -1,7 +1,11 @@
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseBadRequest
 from django.utils import timezone
-from .models import Product
+from .models import Product, Cart, CartItem, User
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+from django.db import transaction
+import json
 
 # Create your views here.
 
@@ -43,3 +47,54 @@ def product_list(request):
     
     # Return the data as a JSON response
     return JsonResponse(data)
+
+@csrf_exempt
+@require_POST
+def add_to_cart(request):
+    """
+    API view to add a product to the cart.
+    Expects a JSON body with 'product_id' and 'quantity'.
+    The user is identified from the request session.
+    """
+    if not request.user.is_authenticated:
+        return HttpResponse(json.dumps({'error': 'Authentication required'}), content_type='application/json', status=401)
+
+    try:
+        data = json.loads(request.body)
+        product_id = data.get('product_id')
+        quantity = int(data.get('quantity', 1))
+        
+        if not product_id or quantity < 1:
+            return HttpResponseBadRequest(json.dumps({'error': 'Invalid product_id or quantity'}), content_type='application/json')
+
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return HttpResponseBadRequest(json.dumps({'error': 'Invalid or missing JSON data'}), content_type='application/json')
+
+    try:
+        product = Product.objects.get(id=product_id, is_active=True)
+    except Product.DoesNotExist:
+        return JsonResponse({'error': 'Product not found'}, status=404)
+
+    with transaction.atomic():
+        cart, _ = Cart.objects.get_or_create(user=request.user, is_active=True)
+        
+        cart_item, created = CartItem.objects.get_or_create(
+            cart=cart,
+            product=product
+        )
+
+        if created:
+            final_quantity = quantity
+        else:
+            final_quantity = cart_item.quantity + quantity
+
+        if product.stock_quantity < final_quantity:
+            return JsonResponse({'error': f'Not enough stock for {product.name}. Only {product.stock_quantity} available.'}, status=400)
+
+        cart_item.quantity = final_quantity
+        cart_item.save()
+
+    return JsonResponse({
+        'message': f'{product.name} added to cart successfully',
+        'cart_total_items': cart.get_total_quantity(),
+    })
