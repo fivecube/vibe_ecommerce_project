@@ -1,6 +1,6 @@
+from django.contrib.auth.models import User
 from django.db import models
 from django.utils import timezone
-from django.contrib.auth.models import User
 
 # Create your models here.
 
@@ -120,3 +120,76 @@ class CartItem(models.Model):
         if self.quantity > self.product.stock_quantity:
             self.quantity = self.product.stock_quantity
         super().save(*args, **kwargs)
+
+class Order(models.Model):
+    """Order model representing a completed purchase"""
+    STATUS_CHOICES = [
+        ("PENDING", "Pending"),
+        ("ACCEPTED", "Accepted"),
+        ("PACKED", "Packed"),
+        ("DISPATCHED", "Dispatched"),
+        ("IN_TRANSIT", "In Transit"),
+        ("OUT_FOR_DELIVERY", "Out for Delivery"),
+        ("DELIVERED", "Delivered"),
+        ("CANCELLED", "Cancelled"),
+    ]
+    order_id = models.CharField(max_length=32, unique=True, blank=True, help_text="Unique Order ID (auto-generated)")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default='PENDING', help_text="Order status")
+    total_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    currency = models.CharField(max_length=8, default='USD', help_text="Currency code, e.g. USD, EUR")
+    shipping_address = models.TextField(blank=True)
+    billing_address = models.TextField(blank=True)
+    cod = models.BooleanField(default=False, help_text="Is this order Cash on Delivery?")
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Order {self.order_id or self.id} by {self.user.username} ({self.status})"
+
+    def get_total_quantity(self):
+        return sum(item.quantity for item in self.items.all())
+
+    def get_total_price(self):
+        return sum(item.get_total_price() for item in self.items.all())
+
+    def save(self, *args, **kwargs):
+        if not self.order_id:
+            from datetime import datetime
+            today = datetime.now().strftime('%Y%m%d')
+            last_order = Order.objects.filter(created_at__date=datetime.now().date()).order_by('-id').first()
+            next_num = 1
+            if last_order and last_order.order_id and last_order.order_id.startswith(f'ORD-{today}'):
+                try:
+                    next_num = int(last_order.order_id.split('-')[-1]) + 1
+                except Exception:
+                    pass
+            self.order_id = f"ORD-{today}-{next_num:04d}"
+        super().save(*args, **kwargs)
+
+class OrderItem(models.Model):
+    """Individual item in an order (structure mirrors CartItem)"""
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='order_items')
+    quantity = models.PositiveIntegerField(default=1)
+    price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Price at the time of ordering")
+    currency = models.CharField(max_length=8, default='USD', help_text="Currency code, e.g. USD, EUR")
+    added_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-added_at']
+
+    def __str__(self):
+        return f"{self.quantity}x {self.product.name} in Order #{self.order.id} ({self.currency})"
+
+    def get_total_price(self):
+        if self.price is not None:
+            return self.price * self.quantity
+        return 0
+
+    def get_display_total_price(self):
+        return f"{self.currency} {self.get_total_price()}"

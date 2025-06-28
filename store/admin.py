@@ -1,6 +1,7 @@
-from django.contrib import admin
 from django import forms
-from .models import Category, Product, Cart, CartItem
+from django.contrib import admin
+
+from .models import Cart, CartItem, Category, Order, OrderItem, Product
 
 # Register your models here.
 
@@ -74,6 +75,30 @@ class CartItemAdmin(admin.ModelAdmin):
     list_display = ['cart', 'product', 'quantity', 'price', 'currency', 'get_total_price', 'added_at']
     list_filter = ['added_at', 'product__category', 'currency']
     search_fields = ['product__name', 'cart__user__username']
+    readonly_fields = ['added_at', 'updated_at', 'total_price']
+    ordering = ['-added_at']
+
+    def get_total_price(self, obj):
+        return obj.get_display_total_price()
+    get_total_price.short_description = 'Total Price'
+
+    def total_price(self, obj):
+        return obj.get_display_total_price()
+    total_price.short_description = 'Total Price'
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'status', 'total_price', 'currency', 'created_at']
+    list_filter = ['status', 'currency', 'created_at']
+    search_fields = ['user__username', 'user__email', 'id']
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['-created_at']
+
+@admin.register(OrderItem)
+class OrderItemAdmin(admin.ModelAdmin):
+    list_display = ['order', 'product', 'quantity', 'price', 'currency', 'get_total_price', 'added_at']
+    list_filter = ['added_at', 'product__category', 'currency']
+    search_fields = ['product__name', 'order__user__username']
     readonly_fields = ['added_at', 'updated_at', 'total_price']
     ordering = ['-added_at']
 
