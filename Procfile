@@ -1,0 +1,1 @@
+web: gunicorn vibe_ecommerce.wsgi:application 
