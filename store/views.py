@@ -1,5 +1,6 @@
 import json
 
+from django.contrib.auth import authenticate, login, logout
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import render
@@ -10,6 +11,88 @@ from django.views.decorators.http import require_POST
 from .models import Cart, CartItem, Order, OrderItem, Product, User
 
 # Create your views here.
+
+@csrf_exempt
+@require_POST
+def login_user(request):
+    """
+    API view to authenticate user and create session.
+    Expects JSON with 'username' and 'password'.
+    Returns session information for UI use.
+    """
+    try:
+        data = json.loads(request.body)
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return JsonResponse({'error': 'Username and password are required'}, status=400)
+            
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    
+    # Authenticate user
+    user = authenticate(request, username=username, password=password)
+    
+    if user is not None:
+        # Log in the user (creates session)
+        login(request, user)
+        
+        # Get session key for UI use
+        session_key = request.session.session_key
+        
+        return JsonResponse({
+            'message': 'Login successful',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'is_staff': user.is_staff,
+                'is_superuser': user.is_superuser,
+            },
+            'session_id': session_key,
+            'authenticated': True
+        })
+    else:
+        return JsonResponse({'error': 'Invalid credentials'}, status=401)
+
+@csrf_exempt
+@require_POST
+def logout_user(request):
+    """
+    API view to logout user and destroy session.
+    """
+    if request.user.is_authenticated:
+        logout(request)
+        return JsonResponse({
+            'message': 'Logout successful',
+            'authenticated': False
+        })
+    else:
+        return JsonResponse({'error': 'No user is currently logged in'}, status=400)
+
+@csrf_exempt
+def check_auth_status(request):
+    """
+    API view to check if user is authenticated and return user info.
+    """
+    if request.user.is_authenticated:
+        return JsonResponse({
+            'authenticated': True,
+            'user': {
+                'id': request.user.id,
+                'username': request.user.username,
+                'email': request.user.email,
+                'is_staff': request.user.is_staff,
+                'is_superuser': request.user.is_superuser,
+            },
+            'session_id': request.session.session_key
+        })
+    else:
+        return JsonResponse({
+            'authenticated': False,
+            'user': None
+        })
 
 def product_list(request):
     """

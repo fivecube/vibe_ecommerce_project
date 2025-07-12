@@ -4,6 +4,11 @@ from . import views
 
 # Define the URL patterns for the store app
 urlpatterns = [
+    # Authentication endpoints
+    path('auth/login/', views.login_user, name='login-user'),
+    path('auth/logout/', views.logout_user, name='logout-user'),
+    path('auth/status/', views.check_auth_status, name='check-auth-status'),
+    
     # This pattern maps the 'products/' URL to our product_list view
     path('products/', views.product_list, name='product-list'),
     # This pattern maps the 'cart/' URL to our get_cart view
